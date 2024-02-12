@@ -76,13 +76,14 @@ const identify = async (reqBody: JSON) => {
 
         const newPrimaryContact: Contact = primaryContacts[1];
 
-        // Demote newer primary contact to secondary
+        // Demote newer primary contact to secondary and update it's linkedId
         await prisma.contact.update({
           where: {
             id: newPrimaryContact.id,
           },
           data: {
             linkPrecedence: "secondary",
+            linkedId: oldestPrimaryContact.id
           },
         });
 
