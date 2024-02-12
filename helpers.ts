@@ -25,13 +25,11 @@ export const addPrimaryPropertyAtFirst = (
   property: "email" | "phoneNumber"
 ): string[] => {
   const primaryContactProperty = primaryContact[property] ?? "";
-  console.log(`\nprimaryContactProperty: ${JSON.stringify(primaryContactProperty)}`)
 
   primaryContactProperty
     ? secondaryContactPropertyList.splice(0, 0, primaryContactProperty)
     : secondaryContactPropertyList.splice(0, 0, "");
 
-  console.log(`\naddedPrimaryContactPropertyAtFirst: ${JSON.stringify(secondaryContactPropertyList)}`)
   return secondaryContactPropertyList;
 };
 
@@ -68,8 +66,6 @@ export const buildResponseBody = async (
       "phoneNumber"
     );
 
-    console.log(`\nsecondaryContactEmails: ${JSON.stringify(secondaryContactEmails)}, secondarContactPhoneNumbers: ${JSON.stringify(secondaryContactPhoneNumbers)}`)
-
     const response: IdentifyRouteResBody = {
       contact: {
         primaryContactId: primaryContact.id,
@@ -97,7 +93,6 @@ export const buildResponseBody = async (
 export const buildSingleContactResponseBody = (
 	primaryContact: Contact
 ): IdentifyRouteResBody => {
-  console.log(`primaryContactEmail: ${primaryContact.email}, primaryContactPhoneNumber: ${primaryContact.phoneNumber}`)
 	const response: IdentifyRouteResBody = {
 		contact: {
 			primaryContactId: primaryContact.id,
@@ -109,6 +104,5 @@ export const buildSingleContactResponseBody = (
 		},
 	};
 
-  console.log(`response: ${JSON.stringify(response)}`);
 	return response;
 }

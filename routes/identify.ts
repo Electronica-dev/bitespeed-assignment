@@ -26,40 +26,15 @@ const identify = async (reqBody: JSON) => {
 
   const email = reqBody.email ?? null;
   const phoneNumber = reqBody.phoneNumber ?? null;
+
+  let singleContact: Contact | null = null;
   let emailOrPhoneInDb: Contact[] = [];
 
-  if (email) {
-    try {
-      emailOrPhoneInDb = await prisma.contact.findMany({
-        where: {
-          email,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
-    } catch (error) {
-      throw new Error(`Unable to find contact with email ${email}: ${error}`);
-    }
-  } else {
-    try {
-      emailOrPhoneInDb = await prisma.contact.findMany({
-        where: {
-          phoneNumber,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
-    } catch (error) {
-      throw new Error(
-        `Unable to find contact with phoneNumber ${phoneNumber}: ${error}`
-      );
-    }
-  }
+  let primaryEmailContact: Contact | null = null;
+  let primaryPhoneNumberContact: Contact | null = null;
 
-  if (emailOrPhoneInDb.length !== 0 && email && phoneNumber) {
-    const singleContact: Contact | null = await prisma.contact.findFirst({
+  if (email && phoneNumber) {
+    singleContact = await prisma.contact.findFirst({
       where: {
         email,
         phoneNumber,
@@ -69,8 +44,86 @@ const identify = async (reqBody: JSON) => {
       },
     });
 
+    if (!singleContact) {
+      primaryEmailContact = await prisma.contact.findFirst({
+        where: {
+          email,
+          linkPrecedence: "primary",
+        },
+      });
+
+      primaryPhoneNumberContact = await prisma.contact.findFirst({
+        where: {
+          phoneNumber,
+          linkPrecedence: "primary",
+        },
+      });
+
+      // Special case where email and contact belong to different primary contacts
+      if (primaryEmailContact && primaryPhoneNumberContact) {
+        let primaryContacts: Contact[] = [
+          primaryEmailContact,
+          primaryPhoneNumberContact,
+        ];
+
+        primaryContacts.sort(
+          (contact1, contact2) =>
+            contact1.createdAt.getTime() - contact2.createdAt.getTime()
+        );
+
+        const oldestPrimaryContact: Contact = primaryContacts[0];
+
+        const newPrimaryContact: Contact = primaryContacts[1];
+
+        // Demote newer primary contact to secondary
+        await prisma.contact.update({
+          where: {
+            id: newPrimaryContact.id,
+          },
+          data: {
+            linkPrecedence: "secondary",
+          },
+        });
+
+        // Relink primary contacts of the new secondary contact to the oldest primary contact
+        await prisma.contact.updateMany({
+          where: {
+            linkedId: newPrimaryContact.id,
+          },
+          data: {
+            linkedId: oldestPrimaryContact.id,
+          },
+        });
+
+        const response: IdentifyRouteResBody = await buildResponseBody(
+          oldestPrimaryContact
+        );
+
+        return response;
+      }
+    }
+  }
+
+  try {
+    emailOrPhoneInDb = await prisma.contact.findMany({
+      where: {
+        OR: [
+          { email: { not: null, equals: email } },
+          { phoneNumber: { not: null, equals: phoneNumber } },
+        ],
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+  } catch (error) {
+    throw new Error(`Unable to find contact with email ${email}: ${error}`);
+  }
+
+  if (emailOrPhoneInDb.length !== 0 && email && phoneNumber) {
     if (singleContact) {
-      // There is already a Contact in the DB with the following details so there is no need to create a secondary contact
+      // There is already a Contact in the DB with the following details so there is no need to
+      // create a secondary contact
       if (singleContact.linkPrecedence === "primary") {
         const response: IdentifyRouteResBody = await buildResponseBody(
           singleContact
@@ -149,7 +202,6 @@ const identify = async (reqBody: JSON) => {
     return response;
   } else {
     // Return contact details
-    console.log("inside else");
     const primaryContact = emailOrPhoneInDb[0];
 
     const response: IdentifyRouteResBody = await buildResponseBody(
