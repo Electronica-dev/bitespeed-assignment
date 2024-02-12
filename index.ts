@@ -11,7 +11,7 @@ app.use(
   })
 );
 
-const PORT = 3001;
+const port = process.env.PORT ?? 3001;
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Hello world");
@@ -29,6 +29,6 @@ app.post("/identify", async (req: Request, res: Response) => {
   res.json(response);
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
 });
