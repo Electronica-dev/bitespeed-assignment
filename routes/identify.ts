@@ -21,6 +21,7 @@ const identify = async (reqBody: JSON) => {
   const valid = validate(reqBody);
 
   if (!valid) {
+    console.error("JSON is not valid. Please recheck.")
     throw new Error("JSON is not valid. Please recheck.");
   }
 
@@ -117,6 +118,7 @@ const identify = async (reqBody: JSON) => {
       },
     });
   } catch (error) {
+    console.error(`Unable to find contact with email ${email}: ${error}`);
     throw new Error(`Unable to find contact with email ${email}: ${error}`);
   }
 
@@ -133,6 +135,7 @@ const identify = async (reqBody: JSON) => {
         let primaryContact: Contact;
 
         if (!singleContact.linkedId) {
+          console.error("Secondary contact linked id is empty");
           throw new Error("Secondary contact linked id is empty");
         }
 
@@ -143,6 +146,11 @@ const identify = async (reqBody: JSON) => {
             },
           });
         } catch (error) {
+          console.error(
+            `Cannot find primary contact linked with secondary contact ${JSON.stringify(
+              singleContact
+            )}: ${error}`
+          );
           throw new Error(
             `Cannot find primary contact linked with secondary contact ${JSON.stringify(
               singleContact
@@ -172,6 +180,7 @@ const identify = async (reqBody: JSON) => {
         data: secondaryContact,
       });
     } catch (error) {
+      console.error(`Error encountered while creating contact: ${error}`);
       throw new Error(`Error encountered while creating contact: ${error}`);
     }
 
@@ -194,6 +203,7 @@ const identify = async (reqBody: JSON) => {
         data: primaryContact,
       });
     } catch (error) {
+      console.error(`Error encountered while creating contact: ${error}`);
       throw new Error(`Error encountered while creating contact: ${error}`);
     }
 

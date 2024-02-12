@@ -48,9 +48,8 @@ export const buildResponseBody = async (
       },
     });
   } catch (error) {
-    throw new Error(
-      `Error while querying DB for secondary contacts: ${error}`
-    );
+    console.error(`Error while querying DB for secondary contacts: ${error}`);
+    throw new Error(`Error while querying DB for secondary contacts: ${error}`);
   }
 
   if (secondaryContacts.length !== 0) {
@@ -85,24 +84,25 @@ export const buildResponseBody = async (
 
     return response;
   } else {
-    const response: IdentifyRouteResBody = buildSingleContactResponseBody(primaryContact);
+    const response: IdentifyRouteResBody =
+      buildSingleContactResponseBody(primaryContact);
     return response;
   }
 };
 
 export const buildSingleContactResponseBody = (
-	primaryContact: Contact
+  primaryContact: Contact
 ): IdentifyRouteResBody => {
-	const response: IdentifyRouteResBody = {
-		contact: {
-			primaryContactId: primaryContact.id,
-			emails: primaryContact.email ? [primaryContact.email] : [],
-			phoneNumbers: primaryContact.phoneNumber
-				? [primaryContact.phoneNumber]
-				: [],
-			secondaryContactIds: [],
-		},
-	};
+  const response: IdentifyRouteResBody = {
+    contact: {
+      primaryContactId: primaryContact.id,
+      emails: primaryContact.email ? [primaryContact.email] : [],
+      phoneNumbers: primaryContact.phoneNumber
+        ? [primaryContact.phoneNumber]
+        : [],
+      secondaryContactIds: [],
+    },
+  };
 
-	return response;
-}
+  return response;
+};

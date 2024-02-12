@@ -22,9 +22,10 @@ app.post("/identify", async (req: Request, res: Response) => {
   try {
     response = await identify(req.body);
   } catch (error) {
+    console.error(`Error: ${error}`);
     res.status(500).send(`Error: ${error}`);
-		return;
-	}
+    return;
+  }
   res.json(response);
 });
 
