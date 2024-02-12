@@ -1,232 +1,114 @@
-import { PrismaClient, Prisma, Contact } from "@prisma/client";
-import Ajv from "ajv";
-import { jsonSchema } from "./constants";
-
-interface IdentifyRouteResBody {
-  contact: {
-    primaryContactId: number;
-    emails: string[]; // first element being email of primary contact
-    phoneNumbers: string[]; // first element being phoneNumber of primary contact
-    secondaryContactIds: number[]; // Array of all Contact IDs that are "secondary" to the primary contact
-  };
-}
-
-const ajv = new Ajv();
-const validate = ajv.compile(jsonSchema);
+import { Contact, PrismaClient } from "@prisma/client";
+import { IdentifyRouteResBody } from "./routes/identify";
 
 const prisma = new PrismaClient();
 
-const identifyRoute = async (reqBody: JSON) => {
-  const valid = validate(reqBody);
+export const getSecondaryContactDetails = (
+  primaryContact: Contact,
+  secondaryContacts: Contact[],
+  property: "email" | "phoneNumber"
+): string[] => {
+  let details: string[] = [];
 
-  if (!valid) {
-    throw new Error("JSON is not valid. Please recheck.");
-  }
+  secondaryContacts.forEach((contact) => {
+    if (contact[property] !== primaryContact[property]) {
+      details.push(contact[property] ?? "");
+    }
+  });
 
-  const email = reqBody.email ?? null;
-  const phoneNumber = reqBody.phoneNumber ?? null;
-  let emailOrPhoneInDb = [];
+  return details;
+};
 
-  if (email) {
-    emailOrPhoneInDb = await prisma.contact.findMany({
+export const addPrimaryPropertyAtFirst = (
+  primaryContact: Contact,
+  secondaryContactPropertyList: string[],
+  property: "email" | "phoneNumber"
+): string[] => {
+  const primaryContactProperty = primaryContact[property] ?? "";
+  console.log(`\nprimaryContactProperty: ${JSON.stringify(primaryContactProperty)}`)
+
+  primaryContactProperty
+    ? secondaryContactPropertyList.splice(0, 0, primaryContactProperty)
+    : secondaryContactPropertyList.splice(0, 0, "");
+
+  console.log(`\naddedPrimaryContactPropertyAtFirst: ${JSON.stringify(secondaryContactPropertyList)}`)
+  return secondaryContactPropertyList;
+};
+
+export const buildResponseBody = async (
+  primaryContact: Contact
+): Promise<IdentifyRouteResBody> => {
+  let secondaryContacts: Contact[] = [];
+
+  try {
+    secondaryContacts = await prisma.contact.findMany({
       where: {
-        email,
+        linkedId: primaryContact.id,
       },
       orderBy: {
         createdAt: "asc",
       },
     });
-  } else {
-    emailOrPhoneInDb = await prisma.contact.findMany({
-      where: {
-        phoneNumber,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
+  } catch (error) {
+    throw new Error(
+      `Error while querying DB for secondary contacts: ${error}`
+    );
   }
 
-  if (emailOrPhoneInDb.length !== 0 && email && phoneNumber) {
-    const primaryContact = emailOrPhoneInDb[0];
-
-    // The contact has new details and has to be linked with it's primary contact
-    const secondaryContact: Prisma.ContactCreateInput = {
-      phoneNumber: phoneNumber,
-      email: email,
-      linkPrecedence: "secondary",
-      linkedId: primaryContact.id,
-    };
-
-    let contactCreationResponse = null;
-    try {
-      contactCreationResponse = await prisma.contact.create({
-        data: secondaryContact,
-      });
-    } catch (error) {
-      throw new Error(`Error encountered while creating contact: ${error}`);
-    }
-
-    let secondaryContacts: Contact[] = [];
-    try {
-      secondaryContacts = await prisma.contact.findMany({
-        where: {
-          linkedId: primaryContact.id,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
-    } catch (error) {
-      throw new Error(
-        `Error while querying DB for secondary contacts: ${error}`
-      );
-    }
-
-    let secondaryContactEmails: string[] = [];
-    let secondaryContactPhoneNumbers: string[] = [];
-
+  if (secondaryContacts.length !== 0) {
     const secondaryContactIds = secondaryContacts.map((contact) => contact.id);
+    const secondaryContactEmails = getSecondaryContactDetails(
+      primaryContact,
+      secondaryContacts,
+      "email"
+    );
+    const secondaryContactPhoneNumbers = getSecondaryContactDetails(
+      primaryContact,
+      secondaryContacts,
+      "phoneNumber"
+    );
 
-    secondaryContacts.forEach((contact) => {
-      if (!contact.email) {
-        secondaryContactEmails.push("");
-      } else if (contact.email !== primaryContact.email) {
-        secondaryContactEmails.push(contact.email);
-      }
-    });
-
-    secondaryContacts.forEach((contact) => {
-      if (!contact.phoneNumber) {
-        secondaryContactPhoneNumbers.push("");
-      } else if (contact.phoneNumber !== primaryContact.phoneNumber) {
-        secondaryContactPhoneNumbers.push(contact.phoneNumber);
-      }
-    });
-
-    primaryContact.email
-      ? secondaryContactEmails.splice(0, 0, primaryContact.email)
-      : secondaryContactEmails.splice(0, 0, "");
-
-    primaryContact.phoneNumber
-      ? secondaryContactPhoneNumbers.splice(0, 0, primaryContact.phoneNumber)
-      : secondaryContactPhoneNumbers.splice(0, 0, "");
+    console.log(`\nsecondaryContactEmails: ${JSON.stringify(secondaryContactEmails)}, secondarContactPhoneNumbers: ${JSON.stringify(secondaryContactPhoneNumbers)}`)
 
     const response: IdentifyRouteResBody = {
       contact: {
         primaryContactId: primaryContact.id,
-        emails: secondaryContactEmails,
-        phoneNumbers: secondaryContactPhoneNumbers,
+        emails: addPrimaryPropertyAtFirst(
+          primaryContact,
+          secondaryContactEmails,
+          "email"
+        ),
+        phoneNumbers: addPrimaryPropertyAtFirst(
+          primaryContact,
+          secondaryContactPhoneNumbers,
+          "phoneNumber"
+        ),
         secondaryContactIds,
       },
     };
 
     return response;
-  } else if (emailOrPhoneInDb.length === 0) {
-    const primaryContact: Prisma.ContactCreateInput = {
-      phoneNumber: phoneNumber,
-      email: email,
-      linkPrecedence: "primary",
-    };
-
-    let contactCreationResponse = null;
-    try {
-      contactCreationResponse = await prisma.contact.create({
-        data: primaryContact,
-      });
-    } catch (error) {
-      throw new Error(`Error encountered while creating contact: ${error}`);
-    }
-
-    const response: IdentifyRouteResBody = {
-      contact: {
-        primaryContactId: contactCreationResponse.id,
-        emails: contactCreationResponse.email
-          ? [contactCreationResponse.email]
-          : [],
-        phoneNumbers: contactCreationResponse.phoneNumber
-          ? [contactCreationResponse.phoneNumber]
-          : [],
-        secondaryContactIds: [],
-      },
-    };
-
-    return response;
   } else {
-    const primaryContact = emailOrPhoneInDb[0];
-
-    let secondaryContacts: Contact[] = [];
-    try {
-      secondaryContacts = await prisma.contact.findMany({
-        where: {
-          linkedId: primaryContact.id,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-      });
-    } catch (error) {
-      throw new Error(
-        `Error while querying DB for secondary contacts: ${error}`
-      );
-    }
-
-    let response: IdentifyRouteResBody | null = null;
-
-    if (secondaryContacts) {
-      let secondaryContactEmails: string[] = [];
-      let secondaryContactPhoneNumbers: string[] = [];
-
-      const secondaryContactIds = secondaryContacts.map(
-        (contact) => contact.id
-      );
-
-      secondaryContacts.forEach((contact) => {
-        if (contact.email && contact.email !== primaryContact.email) {
-          secondaryContactEmails.push(contact.email);
-        }
-      });
-
-      secondaryContacts.forEach((contact) => {
-        if (
-          contact.phoneNumber &&
-          contact.phoneNumber !== primaryContact.phoneNumber
-        ) {
-          secondaryContactPhoneNumbers.push(contact.phoneNumber);
-        }
-      });
-
-      response = {
-        contact: {
-          primaryContactId: primaryContact.id,
-          emails: primaryContact.email
-            ? secondaryContactEmails.splice(0, 0, primaryContact.email)
-            : secondaryContactEmails,
-          phoneNumbers: primaryContact.phoneNumber
-            ? secondaryContactPhoneNumbers.splice(
-                0,
-                0,
-                primaryContact.phoneNumber
-              )
-            : secondaryContactPhoneNumbers,
-          secondaryContactIds,
-        },
-      };
-    } else {
-      response = {
-        contact: {
-          primaryContactId: primaryContact.id,
-          emails: primaryContact.email ? [primaryContact.email] : [],
-          phoneNumbers: primaryContact.phoneNumber
-            ? [primaryContact.phoneNumber]
-            : [],
-          secondaryContactIds: [],
-        },
-      };
-    }
-
+    const response: IdentifyRouteResBody = buildSingleContactResponseBody(primaryContact);
     return response;
   }
 };
 
-export { identifyRoute };
+export const buildSingleContactResponseBody = (
+	primaryContact: Contact
+): IdentifyRouteResBody => {
+  console.log(`primaryContactEmail: ${primaryContact.email}, primaryContactPhoneNumber: ${primaryContact.phoneNumber}`)
+	const response: IdentifyRouteResBody = {
+		contact: {
+			primaryContactId: primaryContact.id,
+			emails: primaryContact.email ? [primaryContact.email] : [],
+			phoneNumbers: primaryContact.phoneNumber
+				? [primaryContact.phoneNumber]
+				: [],
+			secondaryContactIds: [],
+		},
+	};
+
+  console.log(`response: ${JSON.stringify(response)}`);
+	return response;
+}

@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from "express";
 import bodyParser from "body-parser";
-import { identifyRoute } from "./helpers";
+import { identify } from "./routes/identify";
 
 const app: Express = express();
 
@@ -20,7 +20,7 @@ app.get("/", (req: Request, res: Response) => {
 app.post("/identify", async (req: Request, res: Response) => {
   let response = null;
   try {
-    response = await identifyRoute(req.body);
+    response = await identify(req.body);
   } catch (error) {
     res.status(500).send(`Error: ${error}`);
 		return;
